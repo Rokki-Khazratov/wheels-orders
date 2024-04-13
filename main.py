@@ -57,7 +57,14 @@ def send_orders_to_channel(message):
                 if image_url:
                     image_data = requests.get(image_url).content
 
-                order_message = f"ID: {order['id']}\nName: {order['full_name']}\nPhone: {order['phone_number']}\nAddress: {order['adress']}"
+                order_message = f"ID: {order['id']}\nName: {order['full_name']}\nPhone: {order['phone_number']}\nAddress: {order['adress']}\n\n"
+
+                # Add details information
+                details = order.get('details', [])
+                if details:
+                    order_message += "Details:\n"
+                    for detail in details:
+                        order_message += f"  - {detail['wheel']}, Size: {detail['size']}, Width: {detail['width']}, Length: {detail['length']}, Price: {detail['price']}\n"
 
                 latitude = float(order.get('latitude', 0))
                 longitude = float(order.get('longitude', 0))
@@ -76,6 +83,7 @@ def send_orders_to_channel(message):
                     bot.send_message(CHANNEL, order_message, reply_markup=keyboard)
         except Exception as e:
             print("Error:", e)
+
 
 
 
