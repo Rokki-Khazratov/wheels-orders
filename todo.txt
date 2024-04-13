@@ -1,6 +1,7 @@
-1. hello world channel
+1. hello world channel 
 2. ORDERS = api/orders/ GET 
 3. send ORDERS to channel
-4. 2 online button logic
+      ######
+4. 2 inline button logic
 5. is_checked = True PUT logic
 6. delete order DELETE logic
