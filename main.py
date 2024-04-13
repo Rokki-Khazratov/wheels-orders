@@ -7,7 +7,8 @@ from keys import BOT_TOKEN, ADMINS_CHANNEL_ID
 bot_token = BOT_TOKEN
 bot = telebot.TeleBot(bot_token)
 
-API_ENDPOINT = 'http://127.0.0.1:8000/api/'
+# API_ENDPOINT = 'http://127.0.0.1:8000/api/'
+API_ENDPOINT = 'https://linkbuy.uz/api/'
 CHANNEL = ADMINS_CHANNEL_ID
 
 @bot.message_handler(commands=['start'])
