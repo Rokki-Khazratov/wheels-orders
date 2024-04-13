@@ -101,7 +101,7 @@ def delete_order(order_id):
     except Exception as e:
         print(f"Error deleting order {order_id}: {e}")
 
-        
+
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("accept_"))
 def accept_order_callback(query: CallbackQuery):
@@ -113,6 +113,8 @@ def accept_order_callback(query: CallbackQuery):
         # Hide inline keyboard buttons
         bot.edit_message_reply_markup(chat_id=query.message.chat.id, message_id=query.message.message_id)
         
+
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith("reject_"))
 def reject_order_callback(query: CallbackQuery):
     order_id = query.data.split("_")[1]  # Extract order ID from callback data
@@ -122,8 +124,11 @@ def reject_order_callback(query: CallbackQuery):
     bot.edit_message_reply_markup(chat_id=query.message.chat.id, message_id=query.message.message_id)
     # Delete the main message along with the location and previous messages
     message_id = query.message.message_id
-    for _ in range(3):  # Assuming you need to delete 3 messages along with the main message
-        bot.delete_message(chat_id=query.message.chat.id, message_id=message_id)
+    for _ in range(3):  
+        try:
+            bot.delete_message(chat_id=query.message.chat.id, message_id=message_id)
+        except telebot.apihelper.ApiTelegramException as e:
+            print(f"Error deleting message: {e}")
         message_id -= 1
 
 
