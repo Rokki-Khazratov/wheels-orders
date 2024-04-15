@@ -1,7 +1,8 @@
 import requests
 import telebot
+# import schedule
+import time
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-
 from keys import BOT_TOKEN, ADMINS_CHANNEL_ID
 
 bot_token = BOT_TOKEN
@@ -9,7 +10,6 @@ bot = telebot.TeleBot(bot_token)
 
 API_ENDPOINT = 'http://127.0.0.1:8000/api/'
 # API_ENDPOINT = 'https://linkbuy.uz/api/'
-
 CHANNEL = ADMINS_CHANNEL_ID
 
 @bot.message_handler(commands=['start'])
@@ -29,7 +29,6 @@ def get_orders():
         print("Error fetching orders:", e)
         return []
 
-
 def get_order_detail(order_id):
     try:
         response = requests.get(f"{API_ENDPOINT}orders/{order_id}/")
@@ -43,14 +42,10 @@ def get_order_detail(order_id):
         print(f"Error fetching details for order {order_id}: {e}")
         return None
 
-    
-
-
-@bot.message_handler(commands=['orders'])
-def send_orders_to_channel(message):
+def send_orders_to_channel():
     orders = get_orders()
     if not orders:
-        bot.send_message(message.chat.id, "We have no orders yet.")
+        bot.send_message(CHANNEL, "We have no orders yet.")
     else:
         try:
             for order in orders:
@@ -72,8 +67,6 @@ def send_orders_to_channel(message):
                 longitude = float(order.get('longitude', '0') if order.get('longitude') != 'undefined' else '0')
                 bot.send_location(CHANNEL, latitude, longitude)
 
-
-
                 # Create inline keyboard buttons
                 keyboard = InlineKeyboardMarkup(row_width=2)
                 accept_button = InlineKeyboardButton("Accept", callback_data=f"accept_{order['id']}")
@@ -87,11 +80,6 @@ def send_orders_to_channel(message):
                     bot.send_message(CHANNEL, order_message, reply_markup=keyboard)
         except Exception as e:
             print("Error:", e)
-
-
-
-
-
 
 def update_order_checked(order_id):
     try:
@@ -114,8 +102,6 @@ def delete_order(order_id):
     except Exception as e:
         print(f"Error deleting order {order_id}: {e}")
 
-
-
 @bot.callback_query_handler(func=lambda call: call.data.startswith("accept_"))
 def accept_order_callback(query: CallbackQuery):
     order_id = query.data.split("_")[1]  # Extract order ID from callback data
@@ -125,12 +111,10 @@ def accept_order_callback(query: CallbackQuery):
         update_order_checked(order_id)
         # Hide inline keyboard buttons
         bot.edit_message_reply_markup(chat_id=query.message.chat.id, message_id=query.message.message_id)
-        
-
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("reject_"))
 def reject_order_callback(query: CallbackQuery):
-    order_id = query.data.split("_")[1]  # Extract order ID from callback data
+    order_id = query.data.split("_")[1]  
     # Send DELETE request to delete the order
     delete_order(order_id)
     # Hide inline keyboard buttons
@@ -145,6 +129,7 @@ def reject_order_callback(query: CallbackQuery):
         message_id -= 1
 
 
-
 print("Bot is running...")
-bot.polling()
+while True:
+    send_orders_to_channel()
+    time.sleep(12)  
