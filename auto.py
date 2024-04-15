@@ -1,22 +1,25 @@
+import asyncio
 import requests
-import telebot
-# import schedule
-import time
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram import Bot, types
+from aiogram import Dispatcher
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram import executor
 from keys import BOT_TOKEN, ADMINS_CHANNEL_ID
 
 bot_token = BOT_TOKEN
-bot = telebot.TeleBot(bot_token)
+bot = Bot(token=bot_token)
+dp = Dispatcher(bot)
 
 API_ENDPOINT = 'http://127.0.0.1:8000/api/'
-# API_ENDPOINT = 'https://linkbuy.uz/api/'
 CHANNEL = ADMINS_CHANNEL_ID
 
-@bot.message_handler(commands=['start'])
-def send_hello(message):
-    bot.send_message(message.chat.id, "Hello! Send /orders to fetch and send orders to the channel.")
+already_orders = set()
 
-def get_orders():
+@dp.message_handler(commands=['start'])
+async def send_hello(message: types.Message):
+    await message.answer("Hello! I am Wheels.uz personal assistent.")
+
+async def get_orders():
     try:
         response = requests.get(API_ENDPOINT + 'orders/?is_checked=False')
         if response.status_code == 200:
@@ -29,7 +32,7 @@ def get_orders():
         print("Error fetching orders:", e)
         return []
 
-def get_order_detail(order_id):
+async def get_order_detail(order_id):
     try:
         response = requests.get(f"{API_ENDPOINT}orders/{order_id}/")
         if response.status_code == 200:
@@ -42,46 +45,56 @@ def get_order_detail(order_id):
         print(f"Error fetching details for order {order_id}: {e}")
         return None
 
-def send_orders_to_channel():
-    orders = get_orders()
+async def send_orders_to_channel():
+    orders = await get_orders()
     if not orders:
-        bot.send_message(CHANNEL, "We have no orders yet.")
+        print("We have no orders yet.")
     else:
         try:
             for order in orders:
-                image_url = order.get('passport_image')
-                image_data = None
-                if image_url:
-                    image_data = requests.get(image_url).content
+                print(already_orders)
+                order_id = order.get('id')
 
+                if order_id in already_orders:
+                    continue
+
+                already_orders.add(order_id)
                 order_message = f"ID: {order['id']}\nName: {order['full_name']}\nPhone: {order['phone_number']}\nAddress: {order['adress']}\n\n"
 
-                # Add details information
-                details = order.get('details', [])
-                if details:
-                    order_message += "Details:\n"
-                    for detail in details:
-                        order_message += f"  - {detail['wheel']}, Size: {detail['size']}, Width: {detail['width']}, Length: {detail['length']}, Price: {detail['price']}\n"
+                order_detail = await get_order_detail(order_id)
+                if order_detail:
+                    details = order_detail.get('details', [])
+                    if details:
+                        order_message += "Details:\n"
+                        for detail in details:
+                            order_message += f"  - {detail['wheel']}, Size: {detail['size']}, Width: {detail['width']}, Length: {detail['length']}, Price: {detail['price']}\n"
 
                 latitude = float(order.get('latitude', '0') if order.get('latitude') != 'undefined' else '0')
                 longitude = float(order.get('longitude', '0') if order.get('longitude') != 'undefined' else '0')
-                bot.send_location(CHANNEL, latitude, longitude)
+                await bot.send_location(CHANNEL, latitude, longitude)
 
-                # Create inline keyboard buttons
                 keyboard = InlineKeyboardMarkup(row_width=2)
                 accept_button = InlineKeyboardButton("Accept", callback_data=f"accept_{order['id']}")
                 reject_button = InlineKeyboardButton("Reject", callback_data=f"reject_{order['id']}")
                 keyboard.add(accept_button, reject_button)
 
-                # Send photo if available, otherwise send message without photo
-                if image_data:
-                    bot.send_photo(CHANNEL, image_data, caption=order_message, reply_markup=keyboard)
-                else:
-                    bot.send_message(CHANNEL, order_message, reply_markup=keyboard)
+                await bot.send_message(CHANNEL, order_message, reply_markup=keyboard)
         except Exception as e:
             print("Error:", e)
 
-def update_order_checked(order_id):
+async def main():
+    while True:
+        await send_orders_to_channel()
+        await asyncio.sleep(15)
+
+@dp.callback_query_handler(lambda c: c.data.startswith('accept_'))
+async def accept_order_callback(query: CallbackQuery):
+    order_id = int(query.data.split("_")[1])
+    # Implement logic to accept order
+    await update_order_checked(order_id)
+    await bot.edit_message_reply_markup(chat_id=query.message.chat.id, message_id=query.message.message_id)
+
+async def update_order_checked(order_id):
     try:
         payload = {"is_checked": True}
         response = requests.patch(f"{API_ENDPOINT}orders/{order_id}/", json=payload)
@@ -92,7 +105,7 @@ def update_order_checked(order_id):
     except Exception as e:
         print(f"Error updating order {order_id}: {e}")
 
-def delete_order(order_id):
+async def delete_order(order_id):
     try:
         response = requests.delete(f"{API_ENDPOINT}orders/{order_id}/")
         if response.status_code == 204:
@@ -102,34 +115,24 @@ def delete_order(order_id):
     except Exception as e:
         print(f"Error deleting order {order_id}: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("accept_"))
-def accept_order_callback(query: CallbackQuery):
-    order_id = query.data.split("_")[1]  # Extract order ID from callback data
-    order_detail = get_order_detail(order_id)
-    if order_detail:
-        # Send PATCH request to update order status to checked
-        update_order_checked(order_id)
-        # Hide inline keyboard buttons
-        bot.edit_message_reply_markup(chat_id=query.message.chat.id, message_id=query.message.message_id)
+@dp.callback_query_handler(lambda c: c.data.startswith('reject_'))
+async def reject_order_callback(query: CallbackQuery):
+    order_id = int(query.data.split("_")[1])
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("reject_"))
-def reject_order_callback(query: CallbackQuery):
-    order_id = query.data.split("_")[1]  
-    # Send DELETE request to delete the order
-    delete_order(order_id)
-    # Hide inline keyboard buttons
-    bot.edit_message_reply_markup(chat_id=query.message.chat.id, message_id=query.message.message_id)
-    # Delete the main message along with the location and previous messages
+    await delete_order(order_id)
+    await bot.edit_message_reply_markup(chat_id=query.message.chat.id, message_id=query.message.message_id)
     message_id = query.message.message_id
-    for _ in range(2):  
+    for _ in range(2):
         try:
-            bot.delete_message(chat_id=query.message.chat.id, message_id=message_id)
-        except telebot.apihelper.ApiTelegramException as e:
+            await bot.delete_message(chat_id=query.message.chat.id, message_id=message_id)
+        except Exception as e:
             print(f"Error deleting message: {e}")
         message_id -= 1
 
-
-print("Bot is running...")
-while True:
-    send_orders_to_channel()
-    time.sleep(12)  
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    try:
+        loop.create_task(main())
+        executor.start_polling(dp, skip_updates=True)
+    finally:
+        loop.close()
